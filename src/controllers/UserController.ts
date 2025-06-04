@@ -209,14 +209,66 @@ export const logout = (req: Request, res: Response) => {
 };
 
 
-export const session = (req: Request, res: Response) => {
-    res.status(200).json({
-        message: {
-            isAuthenticated: true,
-            user: (req as any).user
+export const session = async (req: Request, res: Response) => {
+    try {
+        // Get token from cookies or Authorization header
+        // const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+        const token = req.cookies?.token || req.headers.authorization?.split(' ')[1] || req.query.token;
+
+        if (!token) {
+            res.status(200).json({
+                message: {
+                    isAuthenticated: false,
+                    user: null
+                }
+            });
+            return
         }
-    })
-}
+
+        // Verify the token
+        const decoded = jwt.verify(token, JWT_USER_SECRET) as { id: string, email: string };
+
+        // Fetch user from database
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: {
+                id: true,
+                email: true,
+                username: true,
+                isMailVerified: true,
+                provider: true
+            }
+        });
+
+        if (!user) {
+            res.status(200).json({
+                message: {
+                    isAuthenticated: false,
+                    user: null
+                }
+            });
+            return
+        }
+
+        res.status(200).json({
+            message: {
+                isAuthenticated: true,
+                user: user
+            }
+        });
+        return
+    } catch (error) {
+        console.error('Session verification error:', error);
+        res.status(200).json({
+            message: {
+                isAuthenticated: false,
+                user: null
+            }
+        });
+        return
+    }
+};
+
 
 export const filter = async (req: Request, res: Response) => {
     await prisma.user.deleteMany({
@@ -233,7 +285,7 @@ export const filter = async (req: Request, res: Response) => {
     })
 }
 
-export const get_unverified_users = async (req:Request , res:Response) => {
+export const get_unverified_users = async (req: Request, res: Response) => {
     try {
         const USERS = await prisma.user.findMany({
             where: {
